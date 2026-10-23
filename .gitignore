@@ -11,3 +11,5 @@ ipch/
 *.suo
 .DS_Store
 Thumbs.db
+# macOS build output
+build/
