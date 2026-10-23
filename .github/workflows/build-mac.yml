@@ -1,0 +1,42 @@
+name: Build SpatialExpander macOS VST3
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-mac:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download JUCE 8.0.13
+        run: |
+          curl -L -o /tmp/juce.zip "https://github.com/juce-framework/JUCE/releases/download/8.0.13/juce-8.0.13-macOS.zip"
+          unzip -q /tmp/juce.zip -d /tmp
+          echo "JUCE_DIR=$(find /tmp -maxdepth 2 -type d -name 'Projucer.app' | sed 's|/Projucer.app||' | head -1)" >> $GITHUB_ENV
+
+      - name: Fix JUCE module paths
+        run: |
+          sed -i '' 's|\.\./\.\./Program Files/juce-[^/]*/JUCE/modules|'"$JUCE_DIR"'/modules|g' SpatialExpander.jucer
+
+      - name: Generate Xcode project
+        run: |
+          "$JUCE_DIR/Projucer.app/Contents/MacOS/Projucer" --resave SpatialExpander.jucer
+
+      - name: Build VST3 (arm64)
+        run: |
+          cd Builds/MacOSX
+          xcodebuild -project SpatialExpander.xcodeproj -configuration Release -sdk macosx ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build
+          VST3=$(find . -name "*.vst3" -type d | head -1)
+          echo "Product: $VST3"
+          codesign --force -s - "$VST3"
+          ditto -c -k --sequesterRsrc "$VST3" /tmp/SpatialExpander-macOS-arm64.vst3.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpatialExpander-macOS-arm64
+          path: /tmp/SpatialExpander-macOS-arm64.vst3.zip
+          
